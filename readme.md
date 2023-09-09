@@ -9,6 +9,9 @@
 ## sentiment analysis
 - sa
 
+## gpols natural language processing
+- [gpols-nlp](web/scom-gpols.html)
+
 ---
 
 - [internal repo](https://github.com/nils-holmberg/cca-nlp)
