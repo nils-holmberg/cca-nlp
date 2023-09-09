@@ -3,7 +3,9 @@
 .Rhistory
 
 # folder content
+aud/*
 log/*
+qmd/*
 src/*
 tmp/*
 
