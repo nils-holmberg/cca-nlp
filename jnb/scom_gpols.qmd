@@ -1,0 +1,264 @@
+---
+title: matplotlib
+jupyter: python3
+---
+
+```{python}
+#| id: x-mPtMylSMZS
+#| colab: {base_uri: 'https://localhost:8080/'}
+#| id: x-mPtMylSMZS
+#| outputId: 0dffd08d-24ee-4440-ba45-cba1460ec314
+!pip install -q siuba plotnine
+```
+
+```{python}
+#| id: FNBxb8pHQMnq
+#| echo: true
+#| output: true
+#| colab: {base_uri: 'https://localhost:8080/', height: 206}
+#| id: FNBxb8pHQMnq
+#| outputId: de79f5ec-4a62-43b1-d8e0-4b87ea72af1d
+
+import numpy as np
+import pandas as pd
+#pd.set_option("display.max_rows", 10)
+#from tabulate import tabulate
+import siuba as si
+import plotnine as p9
+import seaborn as sns
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+# plotnine theme
+some_theme = p9.theme_dark() + p9.theme(
+    text=p9.element_text(face="bold", size=20),
+    plot_background=p9.element_rect(fill='gray', colour='black')
+)
+
+# read csv
+#df = pd.read_csv("~/dev/ccg-web/csv/scom-gpols.csv", sep="\t", header=0)
+#df = pd.read_csv("scom-gpols.csv", sep="\t", header=0)
+df = pd.read_csv("https://raw.githubusercontent.com/nils-holmberg/ccg-web/main/csv/scom-gpols.csv", sep="\t", header=0)
+
+#list(df.columns)
+df.head()
+```
+
+```{python}
+#| id: 1HVjbQI_VG5N
+#| id: 1HVjbQI_VG5N
+import re
+from pprint import pprint
+```
+
+```{python}
+#| id: tzapF5c-euLS
+#| colab: {base_uri: 'https://localhost:8080/'}
+#| id: tzapF5c-euLS
+#| outputId: 6cd07759-8a43-4b6d-9aa7-6c047ffc3372
+# Run in python console
+import nltk
+nltk.download('stopwords')
+
+# NLTK Stop words
+from nltk.corpus import stopwords
+stop_words = stopwords.words('english')
+stop_words.extend(['from', 'subject', 're', 'edu', 'use'])
+```
+
+```{python}
+#| id: EPaergsKdpd2
+#| colab: {base_uri: 'https://localhost:8080/'}
+#| id: EPaergsKdpd2
+#| outputId: 11aec9f8-17ad-4f5f-ce44-1e2a2f97f205
+# spacy for lemmatization
+import spacy
+# Run in terminal or command prompt
+!python3 -m spacy download en_core_web_sm
+# Initialize spacy 'en' model, keeping only tagger component (for efficiency)
+# python3 -m spacy download en
+nlp = spacy.load('en_core_web_sm')#, disable=['parser', 'ner'])
+```
+
+```{python}
+#| id: 6ogdIX2uUyHk
+#| id: 6ogdIX2uUyHk
+import gensim
+import gensim.corpora as corpora
+from gensim.utils import simple_preprocess
+from gensim.models import CoherenceModel
+```
+
+```{python}
+#| id: 8r_km2gqVrDT
+#| id: 8r_km2gqVrDT
+df['text'] = df['text'].str.replace("&#039;", "'", regex=False)
+```
+
+```{python}
+#| id: YfWRQVq4WSE_
+#| colab: {base_uri: 'https://localhost:8080/', height: 206}
+#| id: YfWRQVq4WSE_
+#| outputId: e2b33e65-6392-426a-f29c-94dcfa2020ef
+# Function to split the 'text' column into sentences and add a column for sentence number
+def sentences_split(row):
+    doc = nlp(str(row['text']))
+    sentences = []
+    for i, sent in enumerate(doc.sents):
+        sentences.append({'id': row['id'], 'sentence': sent.text, 'sentence_number': i + 1})
+    return sentences
+# Apply the function to the 'df' DataFrame and create a new DataFrame 'sent_df'
+sentences_list = df.apply(sentences_split, axis=1).explode().tolist()
+df_sent = pd.DataFrame(sentences_list)
+df_sent.head()
+```
+
+```{python}
+#| id: I3xpgI_EWfKE
+#| colab: {base_uri: 'https://localhost:8080/', height: 206}
+#| id: I3xpgI_EWfKE
+#| outputId: ba16d6fb-de9e-4aea-883c-71993256d0b1
+# Function to tokenize and analyze each sentence in 'df_sent' using spaCy
+def tokens_split(row):
+    doc = nlp(str(row['sentence']))
+    tokens = []
+    for i, token in enumerate(doc):
+        entity = 'None' if token.ent_type_ == '' else token.ent_type_
+        tokens.append({
+            'id': row['id'],
+            'sentence_number': row['sentence_number'],
+            'token': token.text,
+            'token_number': i + 1,
+            'pos': token.pos_,
+            'entity': entity,
+            'lemma': token.lemma_
+        })
+    return tokens
+# Apply the function to the 'sent_df' DataFrame and create a new DataFrame 'tokens_df'
+tokens_list = df_sent.apply(tokens_split, axis=1).explode().tolist()
+df_tokens = pd.DataFrame(tokens_list)
+df_tokens.head()
+```
+
+```{python}
+#| id: '-4f0bwW8Zc8G'
+#| colab: {base_uri: 'https://localhost:8080/', height: 564}
+#| id: '-4f0bwW8Zc8G'
+#| outputId: e1cd5425-34cf-439b-c324-b485061445a1
+# Filter the DataFrame where the 'token' column contains the case-insensitive substring 'swe'
+df_tokens_filtered = df_tokens[df_tokens['token'].str.contains('swe', case=False)]
+# Plot the frequency diagram of unique POS tags in the 'pos_tag' column of the filtered DataFrame
+plt.figure(figsize=(10, 6))
+sns.countplot(data=df_tokens_filtered, x='pos', order=df_tokens_filtered['pos'].value_counts().index)
+plt.title('Frequency Diagram of Unique POS Tags for Tokens Containing "swe"')
+plt.xlabel('POS Tags')
+plt.ylabel('Frequency')
+plt.show()
+```
+
+```{python}
+#| id: 6xMiv974X8jD
+#| id: 6xMiv974X8jD
+# Write the 'tokens_df_sent' DataFrame to a TSV file called 'scom-gpols-tokens.tsv'
+df_tokens.to_csv('scom-gpols-tokens.tsv', sep='\t', index=False)
+```
+
+```{python}
+#| id: sHKvTkbqYjIm
+#| id: sHKvTkbqYjIm
+# Convert to list
+data = df.text.values.tolist()
+```
+
+```{python}
+#| id: pUwJMoZBcG5m
+#| colab: {base_uri: 'https://localhost:8080/'}
+#| id: pUwJMoZBcG5m
+#| outputId: 4f9c4552-6254-46da-b8a1-3e1c851b9b4a
+pprint(data[:2])
+```
+
+```{python}
+#| id: jRV_wnMZjU9s
+#| colab: {base_uri: 'https://localhost:8080/', height: 206}
+#| id: jRV_wnMZjU9s
+#| outputId: 41955dc6-26bc-405b-d745-cfab784aa67d
+from itertools import chain
+# Create a new DataFrame to store the separated sentences and corresponding IDs
+new_df = pd.DataFrame(columns=['id', 'sentence_number', 'sentence'])
+# Iterate through each row in the original DataFrame
+for index, row in df.iterrows():
+    # Split the text into sentences
+    sentences = str(row['text']).split('. ')
+    # Create a list of sentence numbers
+    sentence_numbers = list(range(1, len(sentences) + 1))
+    # Create a list of IDs corresponding to each sentence
+    ids = [row['id']] * len(sentences)
+    # Create a temporary DataFrame
+    temp_df = pd.DataFrame({'id': ids, 'sentence_number': sentence_numbers, 'sentence': sentences})
+    # Append the temporary DataFrame to the new DataFrame
+    new_df = pd.concat([new_df, temp_df], ignore_index=True)
+# Display the new DataFrame
+new_df.head()
+```
+
+```{python}
+#| id: 8_njNWzoQMnr
+#| include: false
+#| echo: true
+#| output: true
+#| id: 8_njNWzoQMnr
+
+if False:
+    # Generate a frequency diagram of the variable 'Könstillhörighet'
+    df_freq = si.count(df, si._.Könstillhörighet) >> si.arrange(-si._.n)
+
+    # Plotting the frequency diagram using plotnine
+    plot = (p9.ggplot(df_freq, p9.aes(x='Könstillhörighet', y='n')) +
+            p9.geom_bar(stat='identity') +
+            #p9.theme_minimal() +
+            p9.ggtitle('Frequency Diagram of Könstillhörighet') +
+            some_theme)
+    #
+    plot
+```
+
+```{python}
+#| id: OH4pAJZPQMns
+#| include: false
+#| echo: true
+#| output: true
+#| id: OH4pAJZPQMns
+
+if False:
+    # Save the plotnine plot as a PNG image
+    plot.save('../fig/genai-p9.png', width=10, height=8, dpi=300)
+```
+
+
+
+```{python}
+#| id: 2txQeKL8QMns
+#| include: false
+#| echo: true
+#| output: true
+#| id: 2txQeKL8QMns
+
+if False:
+    fig = plot.draw()
+    #
+    fig
+```
+
+```{python}
+#| id: iBwCzDY3QMnt
+#| include: false
+#| echo: true
+#| output: true
+#| id: iBwCzDY3QMnt
+
+if False:
+    # Save the matplotlib figure as a PNG image
+    fig.savefig('../fig/genai-plt.png', format='png', dpi=300)
+```
+
