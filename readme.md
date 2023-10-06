@@ -3,6 +3,9 @@
 ## low-level content analysis
 - word count etc
 
+## part of speech
+- pos
+
 ## entity recognition
 - ner
 
